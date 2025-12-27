@@ -1,0 +1,5 @@
+{
+  "name": "Visual Forensics",
+  "description": "An autonomous multi-agent UX research system that analyzes interface designs, predicts user behavior, and generates actionable optimization strategies using vision-language models.",
+  "requestFramePermissions": []
+}
