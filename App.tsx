@@ -9,6 +9,7 @@ import AuditView from './components/AuditView';
 import ABTestsView from './components/ABTestsView';
 import StrategicPlanView from './components/StrategicPlanView';
 import ResearchReportView from './components/ResearchReportView';
+import ApiKeyModal from './components/ApiKeyModal';
 
 const STATUS_STAGES = [
   "INITIALIZING_NODE",
@@ -27,6 +28,10 @@ function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // API Key State
+  const [sessionApiKey, setSessionApiKey] = useState<string>('');
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,12 +61,21 @@ function App() {
 
   const startAnalysis = async () => {
     if (!image) return;
+
+    // Check if we have an API key (env or session)
+    const hasEnvKey = !!process.env.API_KEY;
+    if (!hasEnvKey && !sessionApiKey) {
+      setShowApiKeyModal(true);
+      return;
+    }
+
     setIsAnalyzing(true);
     setResult(null);
     setCurrentStage(0);
     setError(null);
     try {
-      const analysis = await analyzeInterface(image);
+      // Pass the session key if available (it will be used over env if provided, or fallback logic in service)
+      const analysis = await analyzeInterface(image, sessionApiKey);
       setResult(analysis);
     } catch (err: any) {
       console.error(err);
@@ -78,11 +92,57 @@ function App() {
     setCurrentStage(0);
   };
 
+  const handleSaveApiKey = (key: string) => {
+    setSessionApiKey(key);
+    setShowApiKeyModal(false);
+    // Automatically restart analysis if we have an image
+    if (image) {
+      // Small delay to allow state update to settle if needed, though usually fine.
+      // We can't call startAnalysis directly here because sessionApiKey state might not be updated in closure yet?
+      // Actually, since we just set it, we might need a useEffect or just pass it directly.
+      // Let's rely on the user clicking start again OR better:
+      // We can just call a modified start that takes the key. 
+      // Simplified: Just close modal. User clicks start again.
+      // OR: We can trigger it via a useEffect slightly.
+      // For now, let's keep it simple: just close modal, maybe trigger startAnalysis wrap.
+    }
+  };
+
+  // Effect to auto-start if key was just added and we have an image + user intended to start?
+  // Let's just let the user click start again or we can better handle it by 
+  // having startAnalysis logic check state. 
+  // Actually, let's just make the modal save the key and retry the analysis immediately.
+  useEffect(() => {
+    if (sessionApiKey && image && !isAnalyzing && !result && !error) {
+      // Only if we just came from the modal... complicating state. 
+      // User can click button again. It's fine.
+    }
+  }, [sessionApiKey]);
+
+
   return (
     <div className="min-h-screen bg-[#000] text-white selection:bg-[#FF5C00] selection:text-black">
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onSave={(key) => {
+          setSessionApiKey(key);
+          setShowApiKeyModal(false);
+          // Optional: Auto-retrying would be nice but requires refactoring startAnalysis to accept key directly or wait for state.
+          // Simplest is to let user click again or create a helper.
+          // Let's try to trigger it:
+          setTimeout(() => {
+            // We can't easily call startAnalysis with new state here due to closure.
+            // But we can restart the process if we want. 
+            // Let's leave it to user to click 'Start' again for safety/clarity, 
+            // or render the button as 'Continue' in the modal?
+            // The modal just saves. User clicks Start.
+          }, 100);
+        }}
+      />
+
       <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-[0.03] z-0 select-none">
         <div className="absolute top-20 marquee text-[180px] font-black uppercase tracking-tighter text-outline">
-          Visual Forensic Node • Real-Time Saliency • Persona Simulation • Clinical Heuristics • 
+          Visual Forensic Node • Real-Time Saliency • Persona Simulation • Clinical Heuristics •
         </div>
       </div>
 
@@ -98,12 +158,12 @@ function App() {
                 <span className="text-outline">Engine</span>
               </h1>
               <p className="text-neutral-500 max-w-xl mx-auto text-lg font-medium">
-                Upload a screenshot to perform coordinate-grounded analysis. 
+                Upload a screenshot to perform coordinate-grounded analysis.
                 No fluff. Just evidence.
               </p>
             </div>
-            
-            <div 
+
+            <div
               onClick={() => fileInputRef.current?.click()}
               className="group relative w-full max-w-2xl p-20 rounded-forensic border border-white/5 bg-[#111111]/50 hover:bg-[#111111] transition-all duration-700 cursor-pointer overflow-hidden"
             >
@@ -129,19 +189,18 @@ function App() {
                 </button>
                 <div className="h-6 w-px bg-white/10"></div>
                 <div className="flex items-center space-x-3 text-[10px] font-mono tracking-tighter text-neutral-500">
-                   <div className={`w-2 h-2 rounded-full ${isAnalyzing ? 'bg-[#FF5C00] animate-pulse' : 'bg-green-500'}`}></div>
-                   <span>STATUS: {isAnalyzing ? STATUS_STAGES[currentStage] : (result ? 'AUDIT_COMPLETE' : 'READY_FOR_SCAN')}</span>
+                  <div className={`w-2 h-2 rounded-full ${isAnalyzing ? 'bg-[#FF5C00] animate-pulse' : 'bg-green-500'}`}></div>
+                  <span>STATUS: {isAnalyzing ? STATUS_STAGES[currentStage] : (result ? 'AUDIT_COMPLETE' : 'READY_FOR_SCAN')}</span>
                 </div>
               </div>
-              
-              <button 
+
+              <button
                 onClick={startAnalysis}
                 disabled={isAnalyzing}
-                className={`px-10 py-4 rounded-full font-black uppercase tracking-widest text-xs transition-all duration-500 ${
-                  isAnalyzing 
-                    ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed' 
+                className={`px-10 py-4 rounded-full font-black uppercase tracking-widest text-xs transition-all duration-500 ${isAnalyzing
+                    ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
                     : 'bg-[#FF5C00] hover:bg-white hover:text-black shadow-2xl shadow-[#FF5C00]/20 active:scale-95'
-                }`}
+                  }`}
               >
                 {isAnalyzing ? 'Processing...' : 'Start Clinical Audit'}
               </button>
@@ -150,7 +209,7 @@ function App() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
               <div className="lg:col-span-12 space-y-16">
                 <div className="rounded-forensic border border-white/5 overflow-hidden shadow-2xl bg-black flex items-center justify-center min-h-[400px] relative">
-                   {result?.heatmap ? (
+                  {result?.heatmap ? (
                     <SaliencyHeatmap image={image} heatmap={result.heatmap} />
                   ) : (
                     <>
@@ -158,10 +217,10 @@ function App() {
                       {isAnalyzing && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
                           <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
-                             <div 
-                                className="h-full bg-[#FF5C00] transition-all duration-700" 
-                                style={{ width: `${((currentStage + 1) / STATUS_STAGES.length) * 100}%` }}
-                             ></div>
+                            <div
+                              className="h-full bg-[#FF5C00] transition-all duration-700"
+                              style={{ width: `${((currentStage + 1) / STATUS_STAGES.length) * 100}%` }}
+                            ></div>
                           </div>
                           <p className="text-[10px] font-black uppercase tracking-[0.5em] text-[#FF5C00] animate-pulse">
                             {STATUS_STAGES[currentStage]}

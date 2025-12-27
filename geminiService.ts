@@ -25,11 +25,14 @@ OBJECTIVE: Conduct a Forensic UX Deep-Dive on the provided interface telemetry (
 - JSON ONLY: No preamble. No conversational filler.
 `;
 
-export const analyzeInterface = async (imageBase64: string): Promise<AnalysisResult> => {
+export const analyzeInterface = async (imageBase64: string, apiKey?: string): Promise<AnalysisResult> => {
   if (!imageBase64) throw new Error("Telemetry data missing.");
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-  
+  const key = apiKey || process.env.API_KEY || '';
+  if (!key) throw new Error("API Key is missing. Please provide a valid API Key.");
+
+  const ai = new GoogleGenAI({ apiKey: key });
+
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: [
